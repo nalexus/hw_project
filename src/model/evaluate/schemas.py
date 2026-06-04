@@ -7,8 +7,8 @@ from typing import Any, Mapping
 
 
 @dataclass(frozen=True)
-class ModelCallResult:
-    """Normalized model output for one evaluation batch."""
+class PipelineCallResult:
+    """Normalized model output with classes and probabilities for records."""
 
     classes: list[str]
     probabilities: Any

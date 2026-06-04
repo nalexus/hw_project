@@ -7,11 +7,11 @@ from typing import Any
 
 import numpy as np
 
-from src.model.evaluate.callers import SklearnModelCaller
+from src.model.evaluate.callers import SklearnPipelineCaller
 from src.model.evaluate.policies import ThresholdPolicy, ThresholdPolicyFactory
 from src.model.evaluate.schemas import (
     FinalPrediction,
-    ModelCallResult,
+    PipelineCallResult,
     RawPrediction,
     raw_prediction_dict,
 )
@@ -23,7 +23,7 @@ class RawPredictionBuilder(ABC):
 
     @abstractmethod
     def build(
-        self, records: list[DocumentRecord], result: ModelCallResult
+        self, records: list[DocumentRecord], result: PipelineCallResult
     ) -> list[RawPrediction]:
         """Return raw predictions before rejection policy application."""
 
@@ -32,7 +32,7 @@ class DefaultRawPredictionBuilder(RawPredictionBuilder):
     """Build raw evaluation predictions from model-call results."""
 
     def build(
-        self, records: list[DocumentRecord], result: ModelCallResult
+        self, records: list[DocumentRecord], result: PipelineCallResult
     ) -> list[RawPrediction]:
         """Return raw predictions before rejection policy application."""
 
@@ -65,7 +65,7 @@ def build_prediction_rows(
 
     if not records:
         return []
-    result = SklearnModelCaller().call(model, records)
+    result = SklearnPipelineCaller().call(model, records)
     rows = DefaultRawPredictionBuilder().build(records, result)
     return [row.to_dict() for row in rows]
 
@@ -73,7 +73,7 @@ def build_prediction_rows(
 def prediction_row(record: DocumentRecord, classes, probs, order) -> dict[str, Any]:
     """Build one row with raw class probabilities and metadata."""
 
-    result = ModelCallResult(
+    result = PipelineCallResult(
         classes=[str(label) for label in classes], probabilities=[probs]
     )
     return DefaultRawPredictionBuilder().build([record], result)[0].to_dict()

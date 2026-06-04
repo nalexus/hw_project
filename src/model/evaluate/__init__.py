@@ -1,6 +1,6 @@
 """Evaluation helpers for clean model experiments."""
 
-from src.model.evaluate.callers import ModelCaller, SklearnModelCaller
+from src.model.evaluate.callers import PipelineCaller, SklearnPipelineCaller
 from src.model.evaluate.evaluator import ModelEvaluator
 from src.model.evaluate.metrics import (
     ClassificationMetricsCalculator,
@@ -20,7 +20,7 @@ from src.model.evaluate.schemas import (
     EvaluationResult,
     FinalPrediction,
     MetricSummary,
-    ModelCallResult,
+    PipelineCallResult,
     RawPrediction,
 )
 
@@ -33,12 +33,12 @@ __all__ = [
     "LengthBucketThresholdPolicy",
     "MetricSummary",
     "MetricsCalculator",
-    "ModelCallResult",
-    "ModelCaller",
+    "PipelineCallResult",
+    "PipelineCaller",
     "ModelEvaluator",
     "RawPrediction",
     "RawPredictionBuilder",
-    "SklearnModelCaller",
+    "SklearnPipelineCaller",
     "ThresholdPolicy",
     "ThresholdPolicyFactory",
 ]

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.model.evaluate.callers import ModelCaller, SklearnModelCaller
+from src.model.evaluate.callers import PipelineCaller, SklearnPipelineCaller
 from src.model.evaluate.metrics import ClassificationMetricsCalculator, MetricsCalculator
 from src.model.evaluate.policies import ThresholdPolicy, ThresholdPolicyFactory
 from src.model.evaluate.predictions import (
@@ -20,13 +20,13 @@ class ModelEvaluator:
 
     def __init__(
         self,
-        model_caller: ModelCaller | None = None,
+        model_caller: PipelineCaller | None = None,
         raw_prediction_builder: RawPredictionBuilder | None = None,
         metrics_calculator: MetricsCalculator | None = None,
     ) -> None:
         """Store evaluation collaborators with sklearn defaults."""
 
-        self.model_caller = model_caller or SklearnModelCaller()
+        self.model_caller = model_caller or SklearnPipelineCaller()
         self.raw_prediction_builder = (
             raw_prediction_builder or DefaultRawPredictionBuilder()
         )

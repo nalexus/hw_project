@@ -5,8 +5,8 @@ from src.model.evaluate import (
     GlobalThresholdPolicy,
     LengthBucketThresholdPolicy,
     ModelEvaluator,
-    ModelCallResult,
-    SklearnModelCaller,
+    PipelineCallResult,
+    SklearnPipelineCaller,
     ThresholdPolicyFactory,
 )
 from src.model.train.schemas import DocumentRecord
@@ -67,12 +67,12 @@ def test_threshold_policy_factory_builds_supported_policy_objects():
 
 
 def test_sklearn_model_caller_returns_classes_and_probabilities():
-    """Verify sklearn-specific model calling is isolated in ModelCaller."""
+    """Verify sklearn-specific model calling returns scores for records."""
 
     records = [record("a"), record("b")]
     model = FixedProbabilityPipeline([0.6, 0.4])
 
-    result = SklearnModelCaller().call(model, records)
+    result = SklearnPipelineCaller().call(model, records)
 
     assert result.classes == ["food", "sport"]
     assert result.probabilities.shape == (2, 2)
@@ -82,7 +82,7 @@ def test_raw_prediction_builder_preserves_record_metadata():
     """Verify raw prediction assembly is independent from model calling."""
 
     records = [record("a")]
-    result = ModelCallResult(["food", "sport"], np.array([[0.6, 0.4]]))
+    result = PipelineCallResult(["food", "sport"], np.array([[0.6, 0.4]]))
 
     prediction = DefaultRawPredictionBuilder().build(records, result)[0]
 
