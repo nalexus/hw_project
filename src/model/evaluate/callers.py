@@ -12,12 +12,13 @@ from src.model.train.schemas import DocumentRecord
 
 
 class PipelineCaller(ABC):
-    """Call fitted models and return normalized evaluation scores."""
+    """Call fitted models to return classes and probabilities for records."""
 
     @abstractmethod
-    def call(self, pipeline: Any, records: list[DocumentRecord]) -> PipelineCallResult:
+    def call(
+        self, pipeline: Any, records: list[DocumentRecord]
+    ) -> PipelineCallResult:
         """Return classes and probabilities for evaluation records."""
-
 
 class SklearnPipelineCaller(PipelineCaller):
     """Call sklearn-style classifiers that expose predict_proba and classes_."""
