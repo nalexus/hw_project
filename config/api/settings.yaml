@@ -1,0 +1,5 @@
+# Directory containing model run folders; exactly one *_PROD run is served by default.
+prod_runs_dir: best_pipeline_search_runs
+
+# Maximum accepted document_text length in API requests, measured in characters.
+max_document_length: 10000

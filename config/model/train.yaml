@@ -1,0 +1,41 @@
+# Root directory for the copied labeled dataset used in training/evaluation.
+dataset_dir: data/dataset
+
+# Directory where experiment run artifacts are written.
+runs_dir: best_pipeline_search_runs
+
+# Fraction of provided known records reserved for validation within each label/length group.
+validation_size: 0.15
+
+# Fraction of provided known records reserved for test within each label/length group.
+test_size: 0.15
+
+# Shared reproducibility seed for splitting, candidate CV, and model fitting.
+random_state: 42
+
+# Number of stratified folds used to compare candidate model configs.
+cv_folds: 3
+
+# Number of folds used by sigmoid probability calibration for the selected model.
+calibration_cv_folds: 3
+
+# Number of best CV candidates to fit fully and threshold-tune on validation.
+top_candidates: 3
+
+# Optional cap on candidate configs considered; blank means use the full search space.
+candidate_limit:
+
+# Jaccard threshold used to flag near-duplicate documents during leakage checks.
+near_duplicate_jaccard: 0.92
+
+# Whether near-duplicate leakage findings should fail the training run.
+fail_on_near_duplicates: false
+
+# Whether curated synthetic known/OOD examples are included in model selection.
+include_synthetic: true
+
+# Whether this run should become the single *_PROD serving run.
+promote_selected: false
+
+# Optional run folder prefix; blank uses the default timestamped name.
+run_name:

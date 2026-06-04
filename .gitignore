@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+data/
+best_pipeline_search_runs/
+*.joblib
+temp/

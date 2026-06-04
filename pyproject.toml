@@ -1,0 +1,33 @@
+[project]
+name = "interview-assignment"
+version = "0.1.0"
+description = "Production API with isolated analysis and development environments"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "fastapi",
+    "joblib",
+    "pyyaml",
+    "pydantic",
+    "scikit-learn>=1.7.2",
+    "uvicorn",
+    "sentence-transformers>=5.5.1",
+]
+
+[project.optional-dependencies]
+jupyter = [
+    "jupyterlab",
+    "pandas",
+    "matplotlib",
+]
+dev = [
+    "aider-chat",
+    "black",
+    "httpx",
+    "pytest",
+]
+
+[tool.pytest.ini_options]
+python_files = [
+    "test_*.py",
+    "tests_*.py",
+]

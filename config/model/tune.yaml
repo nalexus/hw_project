@@ -1,0 +1,11 @@
+# Probability threshold grid step used when searching reject-policy thresholds.
+threshold_step: 0.01
+
+# Minimum validation known balanced accuracy required during threshold selection.
+minimum_known_balanced_accuracy: 0.8
+
+# Weight assigned to known-class balanced accuracy in the threshold objective.
+known_weight: 0.5
+
+# Weight assigned to OOD rejection accuracy in the threshold objective.
+ood_weight: 0.5

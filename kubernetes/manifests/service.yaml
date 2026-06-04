@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: text-classifier-api
+  labels:
+    app: text-classifier-api
+spec:
+  type: ClusterIP
+  selector:
+    app: text-classifier-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

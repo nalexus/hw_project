@@ -1,0 +1,26 @@
+# Reject-policy type used by the serving predictor.
+policy: length_bucket
+
+# Probability calibration method expected from the selected training artifact.
+calibration: sigmoid
+
+# Fallback reject threshold when a length bucket has no explicit threshold.
+default_threshold: 0.53
+
+# Per-length probability thresholds below which predictions become "other".
+bucket_thresholds:
+
+  # Threshold for documents with 0-19 tokens.
+  ultra_short: 0.34
+
+  # Threshold for documents with 20-120 tokens.
+  short: 0.39
+
+  # Threshold for documents with 121-435 tokens.
+  medium: 0.53
+
+  # Threshold for documents with 436-738 tokens.
+  long: 0.36
+
+  # Threshold for documents with 739+ tokens.
+  extra_long: 0.48
