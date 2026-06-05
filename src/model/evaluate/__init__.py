@@ -13,8 +13,8 @@ from src.model.evaluate.policies import (
     ThresholdPolicyFactory,
 )
 from src.model.evaluate.predictions import (
-    DefaultRawPredictionBuilder,
-    RawPredictionBuilder,
+    RawPredictionsBuilder,
+    RawPredictionsWithMarginBuilder,
 )
 from src.model.evaluate.schemas import (
     EvaluationResult,
@@ -26,7 +26,6 @@ from src.model.evaluate.schemas import (
 
 __all__ = [
     "ClassificationMetricsCalculator",
-    "DefaultRawPredictionBuilder",
     "EvaluationResult",
     "FinalPrediction",
     "GlobalThresholdPolicy",
@@ -37,7 +36,8 @@ __all__ = [
     "PipelineCaller",
     "ModelEvaluator",
     "RawPrediction",
-    "RawPredictionBuilder",
+    "RawPredictionsBuilder",
+    "RawPredictionsWithMarginBuilder",
     "SklearnPipelineCaller",
     "ThresholdPolicy",
     "ThresholdPolicyFactory",

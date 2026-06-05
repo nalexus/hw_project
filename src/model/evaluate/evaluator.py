@@ -5,11 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 from src.model.evaluate.callers import PipelineCaller, SklearnPipelineCaller
-from src.model.evaluate.metrics import ClassificationMetricsCalculator, MetricsCalculator
+from src.model.evaluate.metrics import (
+    ClassificationMetricsCalculator,
+    MetricsCalculator,
+)
 from src.model.evaluate.policies import ThresholdPolicy, ThresholdPolicyFactory
 from src.model.evaluate.predictions import (
-    DefaultRawPredictionBuilder,
-    RawPredictionBuilder,
+    RawPredictionsBuilder,
+    RawPredictionsWithMarginBuilder,
 )
 from src.model.evaluate.schemas import EvaluationResult, FinalPrediction, RawPrediction
 from src.model.train.schemas import DocumentRecord
@@ -21,16 +24,18 @@ class ModelEvaluator:
     def __init__(
         self,
         model_caller: PipelineCaller | None = None,
-        raw_prediction_builder: RawPredictionBuilder | None = None,
+        raw_prediction_builder: RawPredictionsBuilder | None = None,
         metrics_calculator: MetricsCalculator | None = None,
     ) -> None:
         """Store evaluation collaborators with sklearn defaults."""
 
         self.model_caller = model_caller or SklearnPipelineCaller()
         self.raw_prediction_builder = (
-            raw_prediction_builder or DefaultRawPredictionBuilder()
+            raw_prediction_builder or RawPredictionsWithMarginBuilder()
         )
-        self.metrics_calculator = metrics_calculator or ClassificationMetricsCalculator()
+        self.metrics_calculator = (
+            metrics_calculator or ClassificationMetricsCalculator()
+        )
 
     def evaluate(
         self,

@@ -1,11 +1,11 @@
 import numpy as np
 
 from src.model.evaluate import (
-    DefaultRawPredictionBuilder,
     GlobalThresholdPolicy,
     LengthBucketThresholdPolicy,
     ModelEvaluator,
     PipelineCallResult,
+    RawPredictionsWithMarginBuilder,
     SklearnPipelineCaller,
     ThresholdPolicyFactory,
 )
@@ -84,7 +84,7 @@ def test_raw_prediction_builder_preserves_record_metadata():
     records = [record("a")]
     result = PipelineCallResult(["food", "sport"], np.array([[0.6, 0.4]]))
 
-    prediction = DefaultRawPredictionBuilder().build(records, result)[0]
+    prediction = RawPredictionsWithMarginBuilder().build(records, result)[0]
 
     assert prediction.raw_label == "food"
     assert prediction.top_probability == 0.6

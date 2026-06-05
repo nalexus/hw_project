@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import shutil
+import sys
 from typing import Any
 
 import numpy as np
@@ -27,17 +29,32 @@ class CvProgress:
 
         percent = 100 * candidate_index / self.total_candidates if self.total_candidates else 100
         fold_percent = 100 * current_fold / fold_total if fold_total else 100
-        width = 24
-        filled = round(width * candidate_index / self.total_candidates) if self.total_candidates else width
-        bar = "#" * filled + "-" * (width - filled)
-        is_complete = candidate_index == self.total_candidates and current_fold == fold_total
-        print(
-            f"\rCandidates cross-validation progress [{bar}] "
-            f"{candidate_index}/{self.total_candidates} of candidates ({percent:.1f}%) "
-            f"{current_fold}/{fold_total} folds ({fold_percent:.0f}%)",
-            end="" if not is_complete else "\n",
-            flush=True,
+        terminal_width = shutil.get_terminal_size((100, 20)).columns
+        bar_width = min(24, max(8, terminal_width - 52))
+        filled = (
+            round(bar_width * candidate_index / self.total_candidates)
+            if self.total_candidates
+            else bar_width
         )
+        bar = "#" * filled + "-" * (bar_width - filled)
+        is_complete = candidate_index == self.total_candidates and current_fold == fold_total
+
+        message = (
+            f"CV progress [{bar}] "
+            f"{candidate_index}/{self.total_candidates} candidates ({percent:.1f}%) "
+            f"{current_fold}/{fold_total} folds ({fold_percent:.0f}%)"
+        )
+        if len(message) >= terminal_width:
+            message = (
+                f"CV [{bar}] "
+                f"{candidate_index}/{self.total_candidates} ({percent:.1f}%) "
+                f"{current_fold}/{fold_total} folds"
+            )
+
+        sys.stdout.write(f"\r{message.ljust(max(terminal_width - 1, 1))}")
+        if is_complete:
+            sys.stdout.write("\n")
+        sys.stdout.flush()
 
 
 def build_candidate_configs(limit: int | None = None) -> list[CandidateConfig]:
