@@ -1,1 +1,1 @@
-"""Clean parallel model package for prediction and training."""
+"""TF-IDF model training, evaluation, tuning, and prediction package."""

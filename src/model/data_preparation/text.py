@@ -1,54 +1,103 @@
-"""Text helpers for dataset loading, splitting, and leakage checks."""
+"""Configured tokenization and quantile-derived document-length buckets."""
 
 from __future__ import annotations
 
-import hashlib
+from dataclasses import dataclass
+from pathlib import Path
+import re
 
-from src.model.train.constants import LENGTH_BUCKETS, TOKEN_RE
-
-
-def tokenize(text: str) -> list[str]:
-    """Tokenize text with the shared training/runtime token rule."""
-
-    return TOKEN_RE.findall(text)
+import yaml
 
 
-def length_bucket_for_count(word_count: int) -> str:
-    """Map a word count to the configured length bucket."""
+@dataclass(frozen=True)
+class LengthBucketRule:
+    """Configured inclusive word-count range for one length bucket."""
 
-    for name, lower, upper in LENGTH_BUCKETS:
-        if word_count >= lower and (upper is None or word_count <= upper):
-            return name
-    raise ValueError(f"Unsupported word count: {word_count}")
+    name: str
+    min_words: int
+    max_words: int | None
 
+    def contains(self, word_count: int) -> bool:
+        """Return whether the count belongs to this bucket."""
 
-def normalized_text(text: str) -> str:
-    """Normalize text for duplicate checks and stable hashing."""
-
-    return " ".join(token.lower() for token in tokenize(text))
-
-
-def hash_text(text: str) -> str:
-    """Return a stable SHA-256 hash for normalized text content."""
-
-    normalized = normalized_text(text).encode("utf-8")
-    return hashlib.sha256(normalized).hexdigest()
+        return word_count >= self.min_words and (
+            self.max_words is None or word_count <= self.max_words
+        )
 
 
-def shingle_set(text: str, size: int = 5) -> set[str]:
-    """Return token shingles for near-duplicate checks."""
+@dataclass(frozen=True)
+class TextRules:
+    """Configured tokenization and length-bucket rules."""
 
-    tokens = tokenize(text.lower())
-    if len(tokens) < size:
-        return {" ".join(tokens)} if tokens else set()
-    return {" ".join(tokens[index : index + size]) for index in range(len(tokens) - size + 1)}
+    token_pattern: str
+    length_buckets: tuple[LengthBucketRule, ...]
 
 
-def jaccard(left: set[str], right: set[str]) -> float:
-    """Return Jaccard similarity between two sets."""
+class TextProcessor:
+    """Tokenize text and assign its configured length bucket."""
 
-    if not left and not right:
-        return 1.0
-    if not left or not right:
-        return 0.0
-    return len(left & right) / len(left | right)
+    def __init__(self, rules: TextRules) -> None:
+        """Compile the configured token pattern once for repeated text processing."""
+
+        self.rules = rules
+        self.token_re = re.compile(rules.token_pattern)
+
+    @classmethod
+    def from_config(cls, config_path: str | Path) -> "TextProcessor":
+        """Build a processor from the configured tokenizer and bucket rules."""
+
+        with Path(config_path).open("r", encoding="utf-8") as handle:
+            config = yaml.safe_load(handle) or {}
+        rules = TextRules(
+            token_pattern=str(config["token_pattern"]),
+            length_buckets=tuple(
+                LengthBucketRule(
+                    name=str(item["name"]),
+                    min_words=int(item["min_words"]),
+                    max_words=None
+                    if item.get("max_words") is None
+                    else int(item["max_words"]),
+                )
+                for item in config["length_buckets"]
+            )
+        )
+        cls._validate_rules(rules)
+        return cls(rules)
+
+    @staticmethod
+    def _validate_rules(rules: TextRules) -> None:
+        """Validate that configured length buckets are ordered and non-overlapping."""
+
+        expected_min = 0
+        for bucket in rules.length_buckets:
+            if bucket.min_words != expected_min:
+                raise ValueError(f"Length bucket gap before {bucket.name}")
+            if bucket.max_words is None:
+                return
+            if bucket.max_words < bucket.min_words:
+                raise ValueError(f"Invalid length bucket range: {bucket.name}")
+            expected_min = bucket.max_words + 1
+        raise ValueError("Last length bucket must have max_words: null")
+
+    def tokenize(self, text: str) -> list[str]:
+        """Tokenize text with the configured shared token pattern."""
+
+        return self.token_re.findall(text)
+
+    def length_bucket_for_count(self, word_count: int) -> str:
+        """Map a word count to its configured length bucket."""
+
+        for bucket in self.rules.length_buckets:
+            if bucket.contains(word_count):
+                return bucket.name
+        raise ValueError(f"Unsupported word count: {word_count}")
+
+    def word_count(self, text: str) -> int:
+        """Count tokens using the configured tokenization rule."""
+
+        return len(self.tokenize(text))
+
+    def length_bucket(self, text: str) -> str:
+        """Map document text to its configured length bucket."""
+
+        return self.length_bucket_for_count(self.word_count(text))

@@ -12,7 +12,6 @@ tests
 training
 artifacts
 src/model/data
-src/model/data_preparation
 .ipynb_checkpoints
 api_architecture_options.md
 discussion_points.md

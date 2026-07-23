@@ -11,6 +11,9 @@ dependencies = [
     "scikit-learn>=1.7.2",
     "uvicorn",
     "sentence-transformers>=5.5.1",
+    "numpy>=2.1",
+    "pandas>=2.2",
+    "scipy>=1.14",
 ]
 
 [project.optional-dependencies]
@@ -18,9 +21,9 @@ jupyter = [
     "jupyterlab",
     "pandas",
     "matplotlib",
+    "seaborn>=0.13.2",
 ]
 dev = [
-    "aider-chat",
     "black",
     "httpx",
     "pytest",

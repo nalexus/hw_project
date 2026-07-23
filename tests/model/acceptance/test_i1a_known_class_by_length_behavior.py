@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from dataclasses import replace
 import json
 from pathlib import Path
 from typing import Any
 
+import joblib
 import numpy as np
 import pytest
 import yaml
 
-from src.api.model_loader import build_predictor
-from src.api.settings import PROJECT_ROOT, load_runtime_config, load_settings
+from src.model.predict.predictor import PredictorMultiClass
 
 
 FIXTURE_PATH = (
@@ -22,7 +21,9 @@ FIXTURE_PATH = (
     / "i1a_known_class_by_length"
     / "fixtures.jsonl"
 )
-DEFAULT_GOLDEN_CONFIG_PATH = Path(__file__).resolve().parent / "configs.yaml"
+GATE_CONFIG_PATH = FIXTURE_PATH.parent / "gates.yaml"
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+RUNS_DIR = PROJECT_ROOT / "best_pipeline_search_runs"
 
 
 def load_fixture_rows() -> list[dict[str, Any]]:
@@ -32,63 +33,48 @@ def load_fixture_rows() -> list[dict[str, Any]]:
         return [json.loads(line) for line in handle if line.strip()]
 
 
-@pytest.fixture(scope="module")
-def predictor(request):
-    """Load the requested run predictor once for fixture behavior checks."""
+def load_production_predictor() -> tuple[str, PredictorMultiClass]:
+    """Load the single production-marked TF-IDF run for acceptance testing."""
 
-    return build_predictor(settings_for_pipeline_run(request.config.getoption("pipeline_run")))
-
-
-def settings_for_pipeline_run(pipeline_run: str | None):
-    """Return API settings for the promoted run or requested pipeline run."""
-
-    settings = load_settings()
-    if not pipeline_run:
-        return settings
-    runtime_config_path = resolve_runtime_config_path(pipeline_run)
-    runtime_config = load_runtime_config(runtime_config_path, PROJECT_ROOT)
-    return replace(
-        settings,
-        model_path=Path(runtime_config["model_path"]),
-        threshold_policy=runtime_config,
-        runtime_config_path=runtime_config_path,
-        model_version=runtime_config_path.parent.name,
-    )
+    prod_runs = sorted(path for path in RUNS_DIR.iterdir() if "_PROD" in path.name)
+    if len(prod_runs) != 1:
+        raise ValueError("Expected exactly one *_PROD run for acceptance testing.")
+    run_dir = prod_runs[0]
+    return run_dir.name, load_runtime_predictor(run_dir / "runtime_config.json")
 
 
-def resolve_runtime_config_path(pipeline_run: str) -> Path:
-    """Resolve a run name, run directory, or runtime config path."""
+def load_runtime_predictor(runtime_config_path: Path) -> PredictorMultiClass:
+    """Load the selected plain TF-IDF pipeline and its direct OOD policy."""
 
-    path = Path(pipeline_run)
-    candidates = candidate_runtime_config_paths(path)
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    rendered = "\n".join(f"- {candidate}" for candidate in candidates)
-    raise FileNotFoundError(
-        f"--pipeline-run did not resolve to runtime_config.json. Checked:\n{rendered}"
-    )
+    runtime_config = read_json(runtime_config_path)
+    model_path = resolved_model_path(runtime_config_path.parent, runtime_config["model_path"])
+    pipeline = joblib.load(model_path)
+    return PredictorMultiClass(pipeline=pipeline, threshold_policy=runtime_config)
 
 
-def candidate_runtime_config_paths(path: Path) -> list[Path]:
-    """Return possible runtime config paths for one CLI value."""
+def resolved_model_path(run_dir: Path, configured_model_path: str) -> Path:
+    """Resolve runtime-config model paths relative to their run directory."""
 
-    if path.name == "runtime_config.json":
-        return [path if path.is_absolute() else PROJECT_ROOT / path]
-    if path.is_absolute() or len(path.parts) > 1:
-        candidate_dir = path if path.is_absolute() else PROJECT_ROOT / path
-    else:
-        candidate_dir = PROJECT_ROOT / "best_pipeline_search_runs" / path
-    return [candidate_dir / "runtime_config.json"]
+    path = Path(configured_model_path)
+    return path if path.is_absolute() else run_dir / path
 
 
-def test_golden_known_class_behavior(predictor, request):
+def read_json(path: Path) -> dict[str, Any]:
+    """Read one JSON object from disk."""
+
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def test_golden_known_class_behavior():
     """Evaluate all I.1.A known-class fixtures as one golden behavior gate."""
 
     rows = load_fixture_rows()
-    gate_config = load_gate_config(request.config.getoption("golden_behavior_config"))
-    pipeline_run = request.config.getoption("pipeline_run") or "promoted _PROD"
-    predictions = predictor.predict(np.array([row["text"] for row in rows], dtype=object))
+    pipeline_name, predictor = load_production_predictor()
+    gate_config = load_gate_config()
+    predictions = predictor.predict(
+        np.array([row["text"] for row in rows], dtype=object)
+    )["predicted_label"]
     results = [
         {
             **row,
@@ -98,19 +84,16 @@ def test_golden_known_class_behavior(predictor, request):
         for row, prediction in zip(rows, predictions)
     ]
     report = build_golden_report(results, gate_config)
-    report["summary"].insert(1, f"pipeline_run: {pipeline_run}")
-    request.config._golden_known_report = report["summary"]
+    report["summary"].insert(1, f"production_run: {pipeline_name}")
 
     if report["gate_failures"]:
-        pytest.fail(format_gate_failures(report["gate_failures"]), pytrace=False)
+        pytest.fail("\n".join(report["summary"]), pytrace=False)
 
 
-def load_gate_config(config_path: str | None) -> dict[str, float]:
-    """Load configured golden behavior acceptance thresholds."""
+def load_gate_config() -> dict[str, float]:
+    """Load committed golden behavior acceptance thresholds."""
 
-    path = Path(config_path) if config_path else DEFAULT_GOLDEN_CONFIG_PATH
-    path = path if path.is_absolute() else PROJECT_ROOT / path
-    with path.open("r", encoding="utf-8") as handle:
+    with GATE_CONFIG_PATH.open("r", encoding="utf-8") as handle:
         raw = yaml.safe_load(handle) or {}
     raw = raw.get("golden_behavior_gate", raw)
     return {
@@ -267,11 +250,3 @@ def format_failure_rows(failures: list[dict[str, Any]]) -> list[str]:
             for row in failures
         ],
     ]
-
-
-def format_gate_failures(failures: list[str]) -> str:
-    """Return assertion message for failed golden acceptance gates."""
-
-    if not failures:
-        return ""
-    return "Golden known-class gate failures:\n" + "\n".join(failures)

@@ -1,5 +1,0 @@
-golden_behavior_gate:
-  minimum_golden_accuracy: 0.90
-  minimum_golden_bal_acc: 0.90
-  minimum_category_accuracy: 0.80
-  minimum_length_accuracy: 0.80

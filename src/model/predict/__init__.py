@@ -1,6 +1,9 @@
-"""Prediction helpers for the clean model package."""
+"""Runtime prediction helpers for the TF-IDF OOD policy."""
 
-from src.model.predict.base import PredictorMultiClass
-from src.model.predict.length import length_bucket
+from src.model.predict.predictor import (
+    PredictorMultiClass,
+    TfidfOODPolicy,
+    TfidfSignalExtractor,
+)
 
-__all__ = ["PredictorMultiClass", "length_bucket"]
+__all__ = ["PredictorMultiClass", "TfidfOODPolicy", "TfidfSignalExtractor"]

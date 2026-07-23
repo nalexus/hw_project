@@ -12,6 +12,7 @@ COPY pyproject.toml ./
 RUN pip install --no-cache-dir \
     fastapi \
     joblib \
+    "pandas>=2.2" \
     pydantic \
     pyyaml \
     "scikit-learn>=1.7.2" \

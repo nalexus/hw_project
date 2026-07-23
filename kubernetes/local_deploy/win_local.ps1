@@ -1,8 +1,8 @@
 param(
-    [string]$ImageName = "trellis-classifier:latest",
+    [string]$ImageName = "text-classifier:latest",
     [string]$NodeContainer = "desktop-control-plane",
-    [string]$DeploymentName = "trellis-classifier-api",
-    [string]$ServiceName = "trellis-classifier-api",
+    [string]$DeploymentName = "text-classifier-api",
+    [string]$ServiceName = "text-classifier-api",
     [int]$LocalPort = 8000,
     [switch]$PortForward,
     [switch]$SavePortForwardLogs,

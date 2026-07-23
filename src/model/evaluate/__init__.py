@@ -1,44 +1,12 @@
-"""Evaluation helpers for clean model experiments."""
+"""Metrics for the notebook-derived TF-IDF model workflow."""
 
-from src.model.evaluate.callers import PipelineCaller, SklearnPipelineCaller
-from src.model.evaluate.evaluator import ModelEvaluator
-from src.model.evaluate.metrics import (
-    ClassificationMetricsCalculator,
-    MetricsCalculator,
-)
-from src.model.evaluate.policies import (
-    GlobalThresholdPolicy,
-    LengthBucketThresholdPolicy,
-    ThresholdPolicy,
-    ThresholdPolicyFactory,
-)
-from src.model.evaluate.predictions import (
-    RawPredictionsBuilder,
-    RawPredictionsWithMarginBuilder,
-)
-from src.model.evaluate.schemas import (
-    EvaluationResult,
-    FinalPrediction,
-    MetricSummary,
-    PipelineCallResult,
-    RawPrediction,
-)
+from src.model.evaluate.evaluator import KnownEvaluation, ModelEvaluator, OtherEvaluation
+from src.model.evaluate.metrics import ClassificationScorer, summarize_gate
 
 __all__ = [
-    "ClassificationMetricsCalculator",
-    "EvaluationResult",
-    "FinalPrediction",
-    "GlobalThresholdPolicy",
-    "LengthBucketThresholdPolicy",
-    "MetricSummary",
-    "MetricsCalculator",
-    "PipelineCallResult",
-    "PipelineCaller",
+    "ClassificationScorer",
+    "KnownEvaluation",
     "ModelEvaluator",
-    "RawPrediction",
-    "RawPredictionsBuilder",
-    "RawPredictionsWithMarginBuilder",
-    "SklearnPipelineCaller",
-    "ThresholdPolicy",
-    "ThresholdPolicyFactory",
+    "OtherEvaluation",
+    "summarize_gate",
 ]

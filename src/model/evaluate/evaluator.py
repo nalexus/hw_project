@@ -1,66 +1,131 @@
-"""Facade for evaluating fitted models on document records."""
+"""Evaluate the baseline model and its TF-IDF OOD policy."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
-from src.model.evaluate.callers import PipelineCaller, SklearnPipelineCaller
-from src.model.evaluate.metrics import (
-    ClassificationMetricsCalculator,
-    MetricsCalculator,
-)
-from src.model.evaluate.policies import ThresholdPolicy, ThresholdPolicyFactory
-from src.model.evaluate.predictions import (
-    RawPredictionsBuilder,
-    RawPredictionsWithMarginBuilder,
-)
-from src.model.evaluate.schemas import EvaluationResult, FinalPrediction, RawPrediction
-from src.model.train.schemas import DocumentRecord
+import pandas as pd
+from sklearn.metrics import roc_auc_score
+
+from src.model.data_preparation.loader import DocumentRecord
+from src.model.evaluate.metrics import ClassificationScorer, summarize_gate
+from src.model.predict.predictor import TfidfOODPolicy, TfidfSignalExtractor
+
+
+@dataclass(frozen=True)
+class KnownEvaluation:
+    """Known-class raw metrics plus policy coverage summaries."""
+
+    raw_metrics: dict[str, float]
+    overall: pd.DataFrame
+    by_class: pd.DataFrame
+    by_bucket: pd.DataFrame
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return JSON-ready known-class metrics without document text."""
+
+        return {
+            "raw_metrics": self.raw_metrics,
+            "policy_overall": self.overall.to_dict(orient="records"),
+            "policy_by_class": self.by_class.to_dict(orient="records"),
+            "policy_by_bucket": self.by_bucket.to_dict(orient="records"),
+        }
+
+
+@dataclass(frozen=True)
+class OtherEvaluation:
+    """OOD rejection summary and scored rows for the held-out other class."""
+
+    rejection_rate: float
+    correct_predictions: int
+    num_examples: int
+    accuracy: float
+    results: pd.DataFrame
+
+    def to_dict(self) -> dict[str, float | int]:
+        """Return direct-other accuracy alongside its gate-level rejection rate."""
+
+        return {
+            "num_examples": self.num_examples,
+            "correct_predictions": self.correct_predictions,
+            "accuracy": self.accuracy,
+            "ood_rejection_rate": self.rejection_rate,
+        }
 
 
 class ModelEvaluator:
-    """Evaluate fitted models with injectable evaluation collaborators."""
+    """Score known test rows and untouched ``other`` rows with one policy."""
 
-    def __init__(
-        self,
-        model_caller: PipelineCaller | None = None,
-        raw_prediction_builder: RawPredictionsBuilder | None = None,
-        metrics_calculator: MetricsCalculator | None = None,
-    ) -> None:
-        """Store evaluation collaborators with sklearn defaults."""
-
-        self.model_caller = model_caller or SklearnPipelineCaller()
-        self.raw_prediction_builder = (
-            raw_prediction_builder or RawPredictionsWithMarginBuilder()
-        )
-        self.metrics_calculator = (
-            metrics_calculator or ClassificationMetricsCalculator()
-        )
-
-    def evaluate(
+    def evaluate_known(
         self,
         model: Any,
         records: list[DocumentRecord],
-        policy: ThresholdPolicy | dict[str, Any],
-        known_labels: list[str],
-    ) -> EvaluationResult:
-        """Return predictions and metrics for one evaluation split."""
+        policy: TfidfOODPolicy,
+    ) -> KnownEvaluation:
+        """Return overall, class, and bucket summaries for known test records."""
 
-        raw_predictions = self._raw_predictions(model, records)
-        policy_obj = ThresholdPolicyFactory.from_dict(policy)
-        final_predictions = [
-            FinalPrediction(row, policy_obj.predict_label(row))
-            for row in raw_predictions
-        ]
-        metrics = self.metrics_calculator.summarize(final_predictions, known_labels)
-        return EvaluationResult(metrics=metrics, predictions=final_predictions)
+        results = self._scored_records(model, records, policy)
+        labels = sorted(results["class"].unique())
+        raw_metrics = ClassificationScorer(labels).score_predictions(
+            results["class"], results["raw_label"]
+        )
+        overall = summarize_gate(results)
+        overall.insert(
+            overall.columns.get_loc("raw_accuracy") + 1,
+            "balanced_accuracy",
+            raw_metrics["balanced_accuracy"],
+        )
+        return KnownEvaluation(
+            raw_metrics=raw_metrics,
+            overall=overall,
+            by_class=summarize_gate(results, "class"),
+            by_bucket=summarize_gate(results, "bucket"),
+        )
 
-    def _raw_predictions(
-        self, model: Any, records: list[DocumentRecord]
-    ) -> list[RawPrediction]:
-        """Return raw predictions without calling the model for empty input."""
+    def evaluate_other(
+        self,
+        model: Any,
+        records: list[DocumentRecord],
+        policy: TfidfOODPolicy,
+    ) -> OtherEvaluation:
+        """Return the direct-other rejection rate on untouched OOD examples."""
 
-        if not records:
-            return []
-        result = self.model_caller.call(model, records)
-        return self.raw_prediction_builder.build(records, result)
+        results = self._scored_records(model, records, policy)
+        correct = results["predicted_label"].eq(results["class"])
+        return OtherEvaluation(
+            rejection_rate=float((~results["accepted"]).mean()),
+            correct_predictions=int(correct.sum()),
+            num_examples=len(results),
+            accuracy=float(correct.mean()),
+            results=results,
+        )
+
+    def oof_signal_auroc(self, oof_results: pd.DataFrame) -> pd.Series:
+        """Measure whether OOF confidence and vocabulary support separate errors."""
+
+        is_error = ~oof_results["raw_label"].eq(oof_results["class"])
+        return pd.Series(
+            {
+                "confidence_error_auroc": roc_auc_score(
+                    is_error,
+                    -oof_results["max_probability"],
+                ),
+                "oov_error_auroc": roc_auc_score(
+                    is_error,
+                    oof_results["oov_ratio"],
+                ),
+            }
+        )
+
+    def _scored_records(
+        self,
+        model: Any,
+        records: list[DocumentRecord],
+        policy: TfidfOODPolicy,
+    ) -> pd.DataFrame:
+        """Join metadata, model signals, and final policy assignments."""
+
+        frame = pd.DataFrame(record.as_row() for record in records)
+        signals = TfidfSignalExtractor(model).score(frame["text"])
+        return policy.apply(frame.join(signals))

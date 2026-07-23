@@ -1,0 +1,17 @@
+token_pattern: "[A-Za-z0-9]+(?:'[A-Za-z0-9]+)?"
+length_buckets:
+  - name: ultra_short
+    min_words: 0
+    max_words: 19
+  - name: short
+    min_words: 20
+    max_words: 126
+  - name: medium
+    min_words: 127
+    max_words: 445
+  - name: long
+    min_words: 446
+    max_words: 779
+  - name: extra_long
+    min_words: 780
+    max_words: null

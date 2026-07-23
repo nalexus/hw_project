@@ -4,10 +4,10 @@
 
 set -euo pipefail
 
-IMAGE_NAME="${IMAGE_NAME:-trellis-classifier:latest}"
+IMAGE_NAME="${IMAGE_NAME:-text-classifier:latest}"
 NODE_CONTAINER="${NODE_CONTAINER:-desktop-control-plane}"
-DEPLOYMENT_NAME="${DEPLOYMENT_NAME:-trellis-classifier-api}"
-SERVICE_NAME="${SERVICE_NAME:-trellis-classifier-api}"
+DEPLOYMENT_NAME="${DEPLOYMENT_NAME:-text-classifier-api}"
+SERVICE_NAME="${SERVICE_NAME:-text-classifier-api}"
 LOCAL_PORT="${LOCAL_PORT:-8000}"
 PORT_FORWARD="${PORT_FORWARD:-false}"
 SAVE_PORT_FORWARD_LOGS="${SAVE_PORT_FORWARD_LOGS:-false}"

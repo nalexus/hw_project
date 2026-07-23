@@ -1,10 +1,15 @@
+import asyncio
 from pathlib import Path
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
+import pandas as pd
 from fastapi.testclient import TestClient
 
-from src.api.main import create_app
-from src.api.model_loader import build_predictor
+from src.api.batching import PredictionBatcher
+from src.api.main import build_predictor, create_app
 from src.api.settings import ApiSettings, load_settings
 
 
@@ -22,13 +27,46 @@ class StubPredictor:
 
         if self.error is not None:
             raise self.error
-        return [self.label for _ in texts]
+        return pd.DataFrame({"predicted_label": [self.label for _ in texts]})
+
+
+class RecordingBatchPredictor:
+    """Predictor test double that records batch calls and preserves text identity."""
+
+    def __init__(self):
+        """Create empty call logs guarded for concurrent API tests."""
+
+        self.calls = []
+        self.call_times = []
+        self._lock = threading.Lock()
+
+    def predict(self, texts):
+        """Return one label derived from each input text."""
+
+        with self._lock:
+            self.calls.append(list(texts))
+            self.call_times.append(time.perf_counter())
+        return pd.DataFrame({
+            "predicted_label": [f"label:{text}" for text in texts],
+        })
+
+
+class FixedTfidfVectorizer:
+    """Small vectorizer test double with a deterministic token vocabulary."""
+
+    vocabulary_ = {"tiny": 0, "note": 1, "word": 2}
+
+    def build_analyzer(self):
+        """Return the lowercase whitespace tokenizer used by this test double."""
+
+        return lambda text: text.lower().split()
 
 
 class FixedProbabilityPipeline:
     """Small model-loader test double with predictable probabilities."""
 
     classes_ = np.array(["food", "sport"])
+    named_steps = {"tfidf": FixedTfidfVectorizer()}
 
     def predict_proba(self, texts):
         """Return a confident food prediction for each text."""
@@ -36,7 +74,7 @@ class FixedProbabilityPipeline:
         return np.tile(np.array([0.60, 0.40]), (len(texts), 1))
 
 
-def build_client(predictor=None, max_document_length=50):
+def build_client(predictor=None, max_document_length=50, batch_max_delay_ms=1):
     """Create a TestClient with an injected predictor."""
 
     settings = ApiSettings(
@@ -46,12 +84,84 @@ def build_client(predictor=None, max_document_length=50):
         runtime_config_path=None,
         max_document_length=max_document_length,
         model_version="baseline",
+        batch_max_delay_ms=batch_max_delay_ms,
     )
     app = create_app(settings=settings)
     app.state.settings = settings
     app.state.predictor = predictor
     app.state.model_load_error = None
     return TestClient(app)
+
+
+def test_prediction_batcher_collects_requests_during_100ms_window():
+    """Verify nearby requests share one predictor call and keep response order."""
+
+    async def scenario():
+        predictor = RecordingBatchPredictor()
+        batcher = PredictionBatcher(
+            predictor=predictor,
+            max_delay_ms=100,
+            max_batch_size=10,
+            max_queue_size=10,
+        )
+        await batcher.start()
+        started_at = time.perf_counter()
+        tasks = []
+        for text in ["doc-a", "doc-b", "doc-c"]:
+            tasks.append(asyncio.create_task(batcher.predict(text)))
+            await asyncio.sleep(0.025)
+        labels = await asyncio.gather(*tasks)
+        await batcher.stop()
+        return predictor, labels, started_at
+
+    predictor, labels, started_at = asyncio.run(scenario())
+
+    assert labels == ["label:doc-a", "label:doc-b", "label:doc-c"]
+    assert predictor.calls == [["doc-a", "doc-b", "doc-c"]]
+    assert predictor.call_times[0] - started_at >= 0.09
+
+
+def test_classify_document_batches_concurrent_clients_without_mixing():
+    """Verify concurrent API clients get labels for their own requests."""
+
+    predictor = RecordingBatchPredictor()
+    settings = ApiSettings(
+        model_path=Path("unused/model.joblib"),
+        threshold=0.16,
+        threshold_policy=None,
+        runtime_config_path=None,
+        max_document_length=50,
+        model_version="baseline",
+        batch_max_delay_ms=100,
+        batch_max_size=10,
+        batch_queue_size=10,
+    )
+    app = create_app(settings=settings)
+    app.state.predictor = predictor
+    app.state.model_load_error = None
+
+    def post_after(client, text: str, delay_seconds: float):
+        """Post one request after a controlled stagger delay."""
+
+        time.sleep(delay_seconds)
+        return client.post("/classify_document", json={"document_text": text})
+
+    with TestClient(app) as client:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = [
+                executor.submit(post_after, client, "doc-a", 0.000),
+                executor.submit(post_after, client, "doc-b", 0.025),
+                executor.submit(post_after, client, "doc-c", 0.050),
+            ]
+            responses = [future.result() for future in futures]
+
+    assert [response.status_code for response in responses] == [200, 200, 200]
+    assert [response.json()["label"] for response in responses] == [
+        "label:doc-a",
+        "label:doc-b",
+        "label:doc-c",
+    ]
+    assert predictor.calls == [["doc-a", "doc-b", "doc-c"]]
 
 
 def test_classify_document_success():
@@ -231,11 +341,11 @@ def test_load_settings_uses_runtime_config_model_and_policy(tmp_path):
     runtime_file = tmp_path / "runtime_config.json"
     runtime_file.write_text(
         "{"
-        '"policy": "length_bucket",'
+        '"policy": "tfidf_ood",'
         '"model_path": "selected_model.joblib",'
-        '"fallback_model_path": "classifier_baseline.joblib",'
-        '"default_threshold": 0.40,'
-        '"bucket_thresholds": {"ultra_short": 0.20, "medium": 0.50}'
+        '"probability_threshold": 0.40,'
+        '"max_oov_ratio": 0.50,'
+        '"other_label": "other"'
         "}",
         encoding="utf-8",
     )
@@ -251,11 +361,10 @@ def test_load_settings_uses_runtime_config_model_and_policy(tmp_path):
 
     assert settings.model_path == model_file
     assert settings.runtime_config_path == runtime_file
-    assert settings.threshold_policy["policy"] == "length_bucket"
-    assert settings.threshold_policy["fallback_model_path"] == (
-        "classifier_baseline.joblib"
-    )
-    assert settings.threshold_policy["bucket_thresholds"]["medium"] == 0.50
+    assert settings.threshold_policy["policy"] == "tfidf_ood"
+    assert settings.threshold_policy["probability_threshold"] == 0.40
+    assert settings.threshold_policy["max_oov_ratio"] == 0.50
+    assert settings.threshold_policy["other_label"] == "other"
 
 
 def test_load_settings_discovers_single_prod_run(tmp_path):
@@ -264,15 +373,16 @@ def test_load_settings_discovers_single_prod_run(tmp_path):
     runs_dir = tmp_path / "best_pipeline_search_runs"
     prod_dir = runs_dir / "run_20260101T000000Z_PROD"
     prod_dir.mkdir(parents=True)
-    model_file = prod_dir / "best_pipeline_run_20260101T000000Z_PROD.joblib"
+    model_file = prod_dir / "model.joblib"
     model_file.write_text("placeholder", encoding="utf-8")
     runtime_file = prod_dir / "runtime_config.json"
     runtime_file.write_text(
         "{"
-        '"policy": "length_bucket",'
-        '"model_path": "best_pipeline_run_20260101T000000Z_PROD.joblib",'
-        '"default_threshold": 0.40,'
-        '"bucket_thresholds": {"medium": 0.50}'
+        '"policy": "tfidf_ood",'
+        '"model_path": "model.joblib",'
+        '"probability_threshold": 0.40,'
+        '"max_oov_ratio": 0.50,'
+        '"other_label": "other"'
         "}",
         encoding="utf-8",
     )
@@ -287,7 +397,7 @@ def test_load_settings_discovers_single_prod_run(tmp_path):
     assert settings.runtime_config_path == runtime_file
     assert settings.model_path == model_file
     assert settings.model_version == "run_20260101T000000Z_PROD"
-    assert settings.threshold_policy["policy"] == "length_bucket"
+    assert settings.threshold_policy["policy"] == "tfidf_ood"
 
 
 def test_load_settings_without_prod_run_points_to_missing_model(tmp_path):
@@ -315,19 +425,22 @@ def test_build_predictor_applies_runtime_policy(monkeypatch, tmp_path):
         model_path=tmp_path / "model.joblib",
         threshold=0.16,
         threshold_policy={
-            "policy": "length_bucket",
-            "default_threshold": 0.50,
-            "bucket_thresholds": {"ultra_short": 0.70, "medium": 0.50},
+        "policy": "tfidf_ood",
+        "probability_threshold": 0.70,
+        "max_oov_ratio": 1.0,
+        "other_label": "other",
         },
         runtime_config_path=None,
         max_document_length=10000,
         model_version="selected-test",
     )
     monkeypatch.setattr(
-        "src.api.model_loader.joblib.load", lambda path: FixedProbabilityPipeline()
+        "src.api.main.joblib.load", lambda path: FixedProbabilityPipeline()
     )
 
     predictor = build_predictor(settings)
-    predictions = predictor.predict(np.array(["tiny note", " ".join(["word"] * 130)]))
+    predictions = predictor.predict(
+        np.array(["tiny note", " ".join(["word"] * 130)])
+    )
 
-    assert predictions == ["other", "food"]
+    assert predictions["predicted_label"].tolist() == ["other", "other"]

@@ -1,11 +1,8 @@
-# Probability threshold grid step used when searching reject-policy thresholds.
-threshold_step: 0.01
+# Reject the least-supported 1% of known OOF texts before confidence selection.
+support_tail_rate: 0.01
 
-# Minimum validation known balanced accuracy required during threshold selection.
-minimum_known_balanced_accuracy: 0.8
+# Maximum observed error among accepted OOF known-class predictions.
+target_accepted_error: 0.02
 
-# Weight assigned to known-class balanced accuracy in the threshold objective.
-known_weight: 0.5
-
-# Weight assigned to OOD rejection accuracy in the threshold objective.
-ood_weight: 0.5
+# Minimum fraction of correctly classified OOF known texts retained by the policy.
+minimum_correct_coverage: 0.95

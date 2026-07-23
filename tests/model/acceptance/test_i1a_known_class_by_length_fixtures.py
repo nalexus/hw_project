@@ -6,9 +6,8 @@ import json
 from pathlib import Path
 
 from src.model.data_preparation.loader import DatasetLoader
-from src.model.data_preparation.text import jaccard, shingle_set
-from src.model.predict.length import TOKEN_RE, length_bucket, word_count
-from src.model.train.validators import DEFAULT_DATASET_DIR
+from src.model.data_preparation.text import TextProcessor
+from src.model.train.validators import TrainingConfigModel
 
 
 FIXTURE_PATH = (
@@ -41,6 +40,7 @@ REQUIRED_FIELDS = {
     "text",
 }
 NEAR_DUPLICATE_JACCARD = 0.92
+TRAIN_CONFIG_PATH = Path("config/model/train.yaml")
 
 
 def load_fixture_rows() -> list[dict]:
@@ -50,42 +50,67 @@ def load_fixture_rows() -> list[dict]:
         return [json.loads(line) for line in handle if line.strip()]
 
 
-def normalized_text(text: str) -> str:
+def normalized_text(text: str, text_processor: TextProcessor) -> str:
     """Normalize fixture text for exact duplicate detection."""
 
-    return " ".join(token.lower() for token in TOKEN_RE.findall(text))
+    return " ".join(token.lower() for token in text_processor.tokenize(text))
 
 
-def has_literal_label(text: str, expected_label: str) -> bool:
+def has_literal_label(
+    text: str,
+    expected_label: str,
+    text_processor: TextProcessor,
+) -> bool:
     """Return whether the expected label appears as a standalone token."""
 
     return expected_label.lower() in {
-        token.lower() for token in TOKEN_RE.findall(text)
+        token.lower() for token in text_processor.tokenize(text)
     }
 
 
-def loaded_record_texts() -> list[tuple[str, str]]:
-    """Load all project records that fixtures must not copy."""
+def loaded_record_texts(text_processor: TextProcessor) -> list[tuple[str, str]]:
+    """Load filtered provided records that fixtures must not copy."""
 
-    bundle = DatasetLoader(DEFAULT_DATASET_DIR, include_synthetic=True).load()
-    records = (
-        bundle.provided_known
-        + bundle.provided_other
-        + bundle.synthetic_known
-        + bundle.synthetic_ood
-    )
-    return [(record.record_id, record.text) for record in records]
+    config = TrainingConfigModel.from_yaml(TRAIN_CONFIG_PATH)
+    bundle = DatasetLoader(
+        config.dataset_dir,
+        other_label=config.other_label,
+        exclusions_config_path=config.exclusions_config_path,
+        text_processor=text_processor,
+    ).load()
+    records = [*bundle.known, *bundle.other]
+    return [(f"{record.label}/{record.file_name}", record.text) for record in records]
+
+
+def shingle_set(
+    text: str,
+    text_processor: TextProcessor,
+    size: int = 5,
+) -> set[tuple[str, ...]]:
+    """Build token shingles for fixture-to-dataset near-copy checks."""
+
+    tokens = [token.lower() for token in text_processor.tokenize(text)]
+    return {tuple(tokens[index:index + size]) for index in range(len(tokens) - size + 1)}
+
+
+def jaccard(left: set[tuple[str, ...]], right: set[tuple[str, ...]]) -> float:
+    """Return Jaccard similarity for two fixture shingle sets."""
+
+    return len(left & right) / len(left | right) if left or right else 0.0
 
 
 def test_fixture_structure():
     """Verify the committed I.1.A fixture file is complete and well-formed."""
 
     rows = load_fixture_rows()
+    text_processor = configured_text_processor()
     row_keys = {(row["expected_label"], row["length_bucket"]) for row in rows}
     expected_keys = {
         (label, bucket) for label in KNOWN_LABELS for bucket in LENGTH_BUCKETS
     }
-    normalized_texts = [normalized_text(row["text"]) for row in rows]
+    normalized_texts = [
+        normalized_text(row["text"], text_processor) for row in rows
+    ]
 
     assert len(rows) == len(expected_keys)
     assert row_keys == expected_keys
@@ -96,31 +121,47 @@ def test_fixture_structure():
         assert row["expected_label"] in KNOWN_LABELS
         assert row["length_bucket"] in LENGTH_BUCKETS
         assert row["text"].strip()
-        assert word_count(row["text"]) == row["word_count"]
-        assert length_bucket(row["text"]) == row["length_bucket"]
-        assert not has_literal_label(row["text"], row["expected_label"])
+        assert text_processor.word_count(row["text"]) == row["word_count"]
+        assert text_processor.length_bucket(row["text"]) == row["length_bucket"]
+        assert not has_literal_label(
+            row["text"], row["expected_label"], text_processor
+        )
 
 
 def test_fixture_texts_do_not_copy_loaded_records():
     """Verify generated fixtures are not exact or near copies of loaded records."""
 
     rows = load_fixture_rows()
-    records = loaded_record_texts()
-    record_texts = {normalized_text(text): record_id for record_id, text in records}
+    text_processor = configured_text_processor()
+    records = loaded_record_texts(text_processor)
+    record_texts = {
+        normalized_text(text, text_processor): record_id for record_id, text in records
+    }
     record_shingles = [
-        (record_id, shingle_set(text.lower())) for record_id, text in records
+        (record_id, shingle_set(text.lower(), text_processor))
+        for record_id, text in records
     ]
     exact_matches = [
-        (row["record_id"], record_texts[normalized_text(row["text"])])
+        (row["record_id"], record_texts[normalized_text(row["text"], text_processor)])
         for row in rows
-        if normalized_text(row["text"]) in record_texts
+        if normalized_text(row["text"], text_processor) in record_texts
     ]
     near_matches = [
         (row["record_id"], record_id)
         for row in rows
         for record_id, shingles in record_shingles
-        if jaccard(shingle_set(row["text"].lower()), shingles) >= NEAR_DUPLICATE_JACCARD
+        if jaccard(
+            shingle_set(row["text"].lower(), text_processor), shingles
+        ) >= NEAR_DUPLICATE_JACCARD
     ]
 
     assert exact_matches == []
     assert near_matches == []
+
+
+def configured_text_processor() -> TextProcessor:
+    """Build the fixture processor from the same YAML used by training."""
+
+    return TextProcessor.from_config(
+        TrainingConfigModel.from_yaml(TRAIN_CONFIG_PATH).text_config_path
+    )

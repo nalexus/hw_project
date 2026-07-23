@@ -1,0 +1,35 @@
+# Reviewed exact and near-duplicate records excluded before splitting.
+# Paths are relative to data/dataset.
+excluded_files:
+  - business/business_82.txt
+  - entertainment/entertainment_34.txt
+  - entertainment/entertainment_48.txt
+  - entertainment/entertainment_59.txt
+  - entertainment/entertainment_82.txt
+  - food/food_29.txt
+  - graphics/graphics_13.txt
+  - graphics/graphics_47.txt
+  - graphics/graphics_56.txt
+  - graphics/graphics_57.txt
+  - historical/historical_1.txt
+  - historical/historical_11.txt
+  - historical/historical_12.txt
+  - historical/historical_59.txt
+  - historical/historical_66.txt
+  - medical/medical_292.txt
+  - medical/medical_424.txt
+  - medical/medical_542.txt
+  - medical/medical_564.txt
+  - medical/medical_672.txt
+  - politics/politics_212.txt
+  - politics/politics_226.txt
+  - politics/politics_287.txt
+  - politics/politics_321.txt
+  - space/space_38.txt
+  - space/space_55.txt
+  - sport/sport_20.txt
+  - sport/sport_49.txt
+  - sport/sport_84.txt
+  - technologie/technologie_4.txt
+  - technologie/technologie_36.txt
+  - technologie/technologie_60.txt
