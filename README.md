@@ -1,5 +1,105 @@
 # Text Classification Case Study
 
+## Quick Start
+
+All commands below assume the current directory is `hw_project`.
+
+### Project Structure
+
+```text
+exploration_solution.ipynb     Analysis, evaluation, and transformer experiment
+config/                        Model and API configuration
+src/model/                     Reproducible training, tuning, evaluation, and prediction
+src/api/                       FastAPI application and request batching
+tests/                         API, unit, integration, and acceptance tests
+data/dataset/                  Labeled source documents
+best_pipeline_search_runs/     Persisted runs; one directory is marked *_PROD
+kubernetes/                    Deployment, service, and local deployment helpers
+```
+
+### Set up the environment
+
+The project targets Python 3.13. For the complete reviewer environment,
+including tests, Jupyter, the zero-shot experiment, and a CPU-only PyTorch
+build, run:
+
+```powershell
+uv sync --extra jupyter --extra dev --extra torch-cpu
+```
+
+This is the default installation path. It works without a CUDA-capable GPU and
+is sufficient for every production command, test, and notebook cell.
+
+For local GPU experimentation only, this machine's NVIDIA driver supports the
+CUDA 13.0 PyTorch build. Use the CUDA extra instead of the CPU extra:
+
+```powershell
+uv sync --extra jupyter --extra dev --extra torch-cu130
+```
+
+The CPU and CUDA extras are deliberately mutually exclusive. Confirm the active
+backend before running the transformer experiment:
+
+```powershell
+uv run --extra jupyter --extra torch-cpu python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
+```
+
+Start the notebook with the same CPU extras:
+
+```powershell
+uv run --extra jupyter --extra torch-cpu jupyter lab exploration_solution.ipynb
+```
+
+### Train and promote a model
+
+```powershell
+uv run python -m src.model.tune.runner --promote-selected
+```
+
+The command writes a timestamped run under `best_pipeline_search_runs/` and
+makes it the single serving run by adding the `_PROD` suffix.
+
+### Run the API
+
+```powershell
+uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+```
+
+- Swagger UI: <http://127.0.0.1:8000/docs>
+- OpenAPI schema: <http://127.0.0.1:8000/openapi.json>
+- Liveness: `GET /health/live`
+- Readiness: `GET /health/ready`
+
+Example request:
+
+```bash
+curl --request POST \
+  --url http://127.0.0.1:8000/classify_document \
+  --header 'Content-Type: application/json' \
+  --data '{"document_text":"The spacecraft entered lunar orbit after a six-day journey."}'
+```
+
+### API Runtime
+
+```text
+Client request
+    -> FastAPI POST /classify_document
+    -> per-pod micro-batch queue (up to 100 ms or 64 documents)
+    -> TF-IDF model and OOD policy
+    -> one response per original request
+
+Docker image (API + configuration + promoted *_PROD run)
+    -> Kubernetes Deployment (two API pods)
+    -> text-classifier-api Service
+```
+
+Each FastAPI pod accepts one document per request. Its local batcher briefly
+collects nearby requests, runs one vectorized predictor call, then returns each
+result to its original caller. The batch delay, batch size, and queue capacity
+are configurable in `config/api/settings.yaml`. Docker packages the serving
+application and promoted model; Kubernetes runs two replicas and sends traffic
+only to pods whose `/health/ready` check succeeds.
+
 ## Solution At A Glance
 
 This project classifies a document into one of ten known categories:
@@ -59,85 +159,6 @@ this repository is exploratory only and is not part of the deployed API.
 [`exploration_solution.ipynb`](exploration_solution.ipynb) documents the
 dataset analysis, baseline selection, OOD-policy design, and transformer
 experiment.
-
-All commands below assume the current directory is `hw_project`.
-
-## Quick Start
-
-### Set up the environment
-
-The project targets Python 3.13. For the complete reviewer environment,
-including tests, Jupyter, the zero-shot experiment, and a CPU-only PyTorch
-build, run:
-
-```powershell
-uv sync --extra jupyter --extra dev --extra torch-cpu
-```
-
-This is the default installation path. It works without a CUDA-capable GPU and
-is sufficient for every production command, test, and notebook cell.
-
-For local GPU experimentation only, this machine's NVIDIA driver supports the
-CUDA 13.0 PyTorch build. Use the CUDA extra instead of the CPU extra:
-
-```powershell
-uv sync --extra jupyter --extra dev --extra torch-cu130
-```
-
-The CPU and CUDA extras are deliberately mutually exclusive. Confirm the active
-backend before running the transformer experiment:
-
-```powershell
-uv run --extra jupyter --extra torch-cpu python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
-```
-
-Start the notebook with the same CPU extras:
-
-```powershell
-uv run --extra jupyter --extra torch-cpu jupyter lab exploration_solution.ipynb
-```
-
-### Project Structure
-
-```text
-exploration_solution.ipynb     Analysis, evaluation, and transformer experiment
-config/                        Model and API configuration
-src/model/                     Reproducible training, tuning, evaluation, and prediction
-src/api/                       FastAPI application and request batching
-tests/                         API, unit, integration, and acceptance tests
-data/dataset/                  Labeled source documents
-best_pipeline_search_runs/     Persisted runs; one directory is marked *_PROD
-kubernetes/                    Deployment, service, and local deployment helpers
-```
-
-### Train and promote a model
-
-```powershell
-uv run python -m src.model.tune.runner --promote-selected
-```
-
-The command writes a timestamped run under `best_pipeline_search_runs/` and
-makes it the single serving run by adding the `_PROD` suffix.
-
-### Run the API
-
-```powershell
-uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000
-```
-
-- Swagger UI: <http://127.0.0.1:8000/docs>
-- OpenAPI schema: <http://127.0.0.1:8000/openapi.json>
-- Liveness: `GET /health/live`
-- Readiness: `GET /health/ready`
-
-Example request:
-
-```bash
-curl --request POST \
-  --url http://127.0.0.1:8000/classify_document \
-  --header 'Content-Type: application/json' \
-  --data '{"document_text":"The spacecraft entered lunar orbit after a six-day journey."}'
-```
 
 ## Data, Modelling, And Evaluation
 
