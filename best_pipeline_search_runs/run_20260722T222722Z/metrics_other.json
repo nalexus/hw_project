@@ -1,0 +1,6 @@
+{
+  "num_examples": 6,
+  "correct_predictions": 6,
+  "accuracy": 1.0,
+  "ood_rejection_rate": 1.0
+}

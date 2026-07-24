@@ -1,0 +1,134 @@
+{
+  "raw_metrics": {
+    "accuracy": 0.9793103448275862,
+    "balanced_accuracy": 0.9790476190476192,
+    "macro_f1": 0.9791819970907847
+  },
+  "policy_overall": [
+    {
+      "_group": "overall",
+      "num_examples": 145,
+      "accepted": 141,
+      "raw_accuracy": 0.9793103448275862,
+      "balanced_accuracy": 0.9790476190476192,
+      "coverage": 0.9724137931034482,
+      "accepted_accuracy": 0.9858156028368794
+    }
+  ],
+  "policy_by_class": [
+    {
+      "class": "business",
+      "num_examples": 15,
+      "accepted": 15,
+      "raw_accuracy": 1.0,
+      "coverage": 1.0,
+      "accepted_accuracy": 1.0
+    },
+    {
+      "class": "entertainment",
+      "num_examples": 14,
+      "accepted": 14,
+      "raw_accuracy": 1.0,
+      "coverage": 1.0,
+      "accepted_accuracy": 1.0
+    },
+    {
+      "class": "food",
+      "num_examples": 15,
+      "accepted": 15,
+      "raw_accuracy": 1.0,
+      "coverage": 1.0,
+      "accepted_accuracy": 1.0
+    },
+    {
+      "class": "graphics",
+      "num_examples": 14,
+      "accepted": 13,
+      "raw_accuracy": 0.8571428571428571,
+      "coverage": 0.9285714285714286,
+      "accepted_accuracy": 0.9230769230769231
+    },
+    {
+      "class": "historical",
+      "num_examples": 14,
+      "accepted": 14,
+      "raw_accuracy": 1.0,
+      "coverage": 1.0,
+      "accepted_accuracy": 1.0
+    },
+    {
+      "class": "medical",
+      "num_examples": 14,
+      "accepted": 14,
+      "raw_accuracy": 1.0,
+      "coverage": 1.0,
+      "accepted_accuracy": 1.0
+    },
+    {
+      "class": "politics",
+      "num_examples": 14,
+      "accepted": 14,
+      "raw_accuracy": 1.0,
+      "coverage": 1.0,
+      "accepted_accuracy": 1.0
+    },
+    {
+      "class": "space",
+      "num_examples": 15,
+      "accepted": 13,
+      "raw_accuracy": 0.9333333333333333,
+      "coverage": 0.8666666666666667,
+      "accepted_accuracy": 0.9230769230769231
+    },
+    {
+      "class": "sport",
+      "num_examples": 15,
+      "accepted": 14,
+      "raw_accuracy": 1.0,
+      "coverage": 0.9333333333333333,
+      "accepted_accuracy": 1.0
+    },
+    {
+      "class": "technologie",
+      "num_examples": 15,
+      "accepted": 15,
+      "raw_accuracy": 1.0,
+      "coverage": 1.0,
+      "accepted_accuracy": 1.0
+    }
+  ],
+  "policy_by_bucket": [
+    {
+      "bucket": "extra_long",
+      "num_examples": 17,
+      "accepted": 17,
+      "raw_accuracy": 1.0,
+      "coverage": 1.0,
+      "accepted_accuracy": 1.0
+    },
+    {
+      "bucket": "long",
+      "num_examples": 17,
+      "accepted": 17,
+      "raw_accuracy": 1.0,
+      "coverage": 1.0,
+      "accepted_accuracy": 1.0
+    },
+    {
+      "bucket": "medium",
+      "num_examples": 101,
+      "accepted": 98,
+      "raw_accuracy": 0.9900990099009901,
+      "coverage": 0.9702970297029703,
+      "accepted_accuracy": 1.0
+    },
+    {
+      "bucket": "short",
+      "num_examples": 10,
+      "accepted": 9,
+      "raw_accuracy": 0.8,
+      "coverage": 0.9,
+      "accepted_accuracy": 0.7777777777777778
+    }
+  ]
+}

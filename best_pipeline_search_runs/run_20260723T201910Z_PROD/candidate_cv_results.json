@@ -1,0 +1,44 @@
+[
+  {
+    "pipeline_id": "tfidf_logreg_unigram",
+    "max_features": 20000,
+    "ngram_range": [
+      1,
+      1
+    ],
+    "min_df": 1,
+    "C": 1.0,
+    "class_weight": NaN,
+    "mean_accuracy": 0.9732714001327141,
+    "mean_balanced_accuracy": 0.9735890652557319,
+    "mean_macro_f1": 0.9732357412030733
+  },
+  {
+    "pipeline_id": "tfidf_logreg_bigram",
+    "max_features": 30000,
+    "ngram_range": [
+      1,
+      2
+    ],
+    "min_df": 1,
+    "C": 1.0,
+    "class_weight": NaN,
+    "mean_accuracy": 0.9720504313205044,
+    "mean_balanced_accuracy": 0.9723544973544973,
+    "mean_macro_f1": 0.9720000295881199
+  },
+  {
+    "pipeline_id": "tfidf_logreg_bigram_balanced",
+    "max_features": 30000,
+    "ngram_range": [
+      1,
+      2
+    ],
+    "min_df": 2,
+    "C": 2.0,
+    "class_weight": "balanced",
+    "mean_accuracy": 0.9708338863083389,
+    "mean_balanced_accuracy": 0.971119929453263,
+    "mean_macro_f1": 0.9707767504704599
+  }
+]

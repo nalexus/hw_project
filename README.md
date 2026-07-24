@@ -12,7 +12,7 @@ config/                        Model and API configuration
 src/model/                     Reproducible training, tuning, evaluation, and prediction
 src/api/                       FastAPI application and request batching
 tests/                         API, unit, integration, and acceptance tests
-data/dataset/                  Labeled source documents
+data/dataset/                  Labeled source documents supplied separately
 best_pipeline_search_runs/     Persisted runs; one directory is marked *_PROD
 kubernetes/                    Deployment, service, and local deployment helpers
 ```
@@ -42,6 +42,31 @@ Start the notebook with the same CPU extras:
 ```powershell
 uv run --extra jupyter --extra torch-cpu jupyter lab exploration_solution.ipynb
 ```
+
+### Provide Source Data
+
+The source dataset is not committed because it may contain confidential
+material. Obtain it through the approved delivery channel and place its class
+directories under `data/dataset/`:
+
+```text
+data/dataset/
+    business/
+    entertainment/
+    food/
+    graphics/
+    historical/
+    medical/
+    politics/
+    space/
+    sport/
+    technologie/
+    other/
+```
+
+Each directory must contain its source `.txt` documents. Training, notebook
+analysis, and source-data integrity checks require this directory. The
+committed promoted run supports API serving without it.
 
 ### Train and promote a model
 
@@ -92,6 +117,20 @@ result to its original caller. The batch delay, batch size, and queue capacity
 are configurable in `config/api/settings.yaml`. Docker packages the serving
 application and promoted model; Kubernetes runs two replicas and sends traffic
 only to pods whose `/health/ready` check succeeds.
+
+### Input Limits
+
+The selected limits for the next API/configuration update are 60,000 characters
+and 9,000 normalized-word tokens per document. The notebook derives them from
+the largest filtered known document (55,227 characters and 8,757 tokens), then
+rounds each value upward to a clear operational boundary. The resulting limits
+retain all 968 known documents while bounding CPU and memory work per request.
+
+No positive minimum character or token count is imposed. The API already
+rejects empty and whitespace-only strings with `422`; otherwise, a short but
+valid input should receive a model decision. The OOD policy can return `other`
+when that input has insufficient confidence or vocabulary support, rather than
+rejecting potentially valid short queries or headlines.
 
 ## Solution At A Glance
 
@@ -306,6 +345,11 @@ currently passes. Its configured thresholds are 90% overall and balanced
 accuracy, plus 80% accuracy for every class and length bucket. The current run
 scores 60% overall and balanced accuracy, so it fails the gate. This is the
 expected result until the model improves.
+
+The fixture-to-source non-copy check and integration tests that exercise the
+configured dataset split require `data/dataset/`. API tests, the golden
+behavior test, and workflow smoke tests do not require the supplied source
+documents.
 
 The fixture data, generation prompt, and refresh command are stored alongside
 the acceptance tests. Regeneration uses a 50-cell class-by-length matrix and

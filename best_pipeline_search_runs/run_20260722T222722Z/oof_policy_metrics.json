@@ -1,0 +1,10 @@
+[
+  {
+    "_group": "overall",
+    "num_examples": 823,
+    "accepted": 770,
+    "raw_accuracy": 0.9732685297691372,
+    "coverage": 0.9356014580801945,
+    "accepted_accuracy": 0.9883116883116884
+  }
+]

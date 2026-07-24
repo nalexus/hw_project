@@ -1,0 +1,7 @@
+{
+  "model_path": "model.joblib",
+  "policy": "tfidf_ood",
+  "probability_threshold": 0.16440945801898155,
+  "max_oov_ratio": 0.35185185185185186,
+  "other_label": "other"
+}
