@@ -37,13 +37,6 @@ CUDA 13.0 PyTorch build. Use the CUDA extra instead of the CPU extra:
 uv sync --extra jupyter --extra dev --extra torch-cu130
 ```
 
-The CPU and CUDA extras are deliberately mutually exclusive. Confirm the active
-backend before running the transformer experiment:
-
-```powershell
-uv run --extra jupyter --extra torch-cpu python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
-```
-
 Start the notebook with the same CPU extras:
 
 ```powershell
