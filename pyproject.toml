@@ -4,30 +4,59 @@ version = "0.1.0"
 description = "Production API with isolated analysis and development environments"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "fastapi",
-    "joblib",
-    "pyyaml",
-    "pydantic",
-    "scikit-learn>=1.7.2",
-    "uvicorn",
-    "sentence-transformers>=5.5.1",
-    "numpy>=2.1",
-    "pandas>=2.2",
-    "scipy>=1.14",
+    "fastapi==0.136.3",
+    "joblib==1.5.3",
+    "numpy==2.4.6",
+    "pandas==3.0.3",
+    "pydantic==2.13.4",
+    "pyyaml==6.0.3",
+    "scikit-learn==1.9.0",
+    "uvicorn==0.49.0",
 ]
 
 [project.optional-dependencies]
 jupyter = [
-    "jupyterlab",
-    "pandas",
-    "matplotlib",
-    "seaborn>=0.13.2",
+    "ipykernel==7.2.0",
+    "jupyterlab==4.1.6",
+    "matplotlib==3.10.9",
+    "seaborn==0.13.2",
+    "transformers==5.10.2",
+]
+torch-cpu = [
+    "torch==2.12.0",
+]
+torch-cu130 = [
+    "torch==2.12.0",
 ]
 dev = [
-    "black",
-    "httpx",
-    "pytest",
+    "black==25.12.0",
+    "httpx==0.28.1",
+    "pytest==9.0.3",
 ]
+
+[tool.uv]
+conflicts = [
+    [
+        { extra = "torch-cpu" },
+        { extra = "torch-cu130" },
+    ],
+]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", extra = "torch-cpu" },
+    { index = "pytorch-cu130", extra = "torch-cu130" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
 
 [tool.pytest.ini_options]
 python_files = [

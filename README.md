@@ -14,11 +14,42 @@ TF-IDF + Logistic Regression
     -> predicted known class or other
 ```
 
+The following extension is not deployed, but is the intended next decision
+step for requests classified as `other`:
+
+```text
+TF-IDF + Logistic Regression predicts other
+    -> fine-tuned small zero-shot/NLI transformer (ModernBERT-base-nli)
+    -> validates other or the TF-IDF top-1 known class
+```
+
 The classifier is trained only on the ten known classes. `other` is reserved
 for out-of-distribution (OOD) evaluation and API responses. A prediction is
 accepted only when its maximum class probability is high enough and its share
 of out-of-vocabulary (OOV) tokens is low enough; otherwise the API returns
 `other`.
+
+### Synthetic Golden Dataset
+
+The acceptance tests include a generated, test-only golden dataset. It contains
+50 distinct English documents: one document for each of the ten known
+classes across all five empirical length buckets. They were generated with
+`gpt-5-mini` through the OpenAI Responses API.
+
+The generation prompt supplies the target class, target word range, length
+bucket, and a stable seed for each class-bucket cell. It requests an original,
+topic-specific document in structured JSON, while prohibiting the literal class
+name and meta descriptions. Each fixture records its model, prompt version,
+seed, word count, and expected label. Integrity tests verify the complete
+class-bucket matrix, token and bucket assignments, fixture uniqueness, and no
+exact or near-copy overlap with the loaded source dataset.
+
+The fixtures were not used for fitting, candidate selection, or OOD-policy
+tuning. The current promoted model achieves `60.00%` overall and balanced
+accuracy on this golden set (`30/50` correct), below the configured `90%`
+acceptance target. This materially weakens the apparently strong held-out
+dataset result: the baseline and OOD policy are not ready to be described as
+real-world production ready.
 
 For a higher-capability production system, rejected documents would be routed
 to a fine-tuned zero-shot/NLI transformer. That model could validate the
@@ -35,30 +66,49 @@ All commands below assume the current directory is `hw_project`.
 
 ### Set up the environment
 
-The project targets Python 3.13. Install the locked project environment,
-including notebook and test dependencies:
+The project targets Python 3.13. For the complete reviewer environment,
+including tests, Jupyter, the zero-shot experiment, and a CPU-only PyTorch
+build, run:
 
 ```powershell
-uv sync --all-extras
+uv sync --extra jupyter --extra dev --extra torch-cpu
 ```
 
-### Audit the dataset
+This is the default installation path. It works without a CUDA-capable GPU and
+is sufficient for every production command, test, and notebook cell.
 
-The optional audit reports invalid documents plus exact and near-duplicate
-groups. Review its output before changing the configured exclusions.
+For local GPU experimentation only, this machine's NVIDIA driver supports the
+CUDA 13.0 PyTorch build. Use the CUDA extra instead of the CPU extra:
 
 ```powershell
-uv run python -m src.model.data_preparation.audit_document
+uv sync --extra jupyter --extra dev --extra torch-cu130
 ```
 
-To regenerate duplicate-exclusion candidates for review:
+The CPU and CUDA extras are deliberately mutually exclusive. Confirm the active
+backend before running the transformer experiment:
 
 ```powershell
-uv run python -m src.model.data_preparation.audit_document --write-exclusions
+uv run --extra jupyter --extra torch-cpu python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
 ```
 
-This writes `config/model/excluded_files.yaml`; inspect the generated list
-before using it for training.
+Start the notebook with the same CPU extras:
+
+```powershell
+uv run --extra jupyter --extra torch-cpu jupyter lab exploration_solution.ipynb
+```
+
+### Project Structure
+
+```text
+exploration_solution.ipynb     Analysis, evaluation, and transformer experiment
+config/                        Model and API configuration
+src/model/                     Reproducible training, tuning, evaluation, and prediction
+src/api/                       FastAPI application and request batching
+tests/                         API, unit, integration, and acceptance tests
+data/dataset/                  Labeled source documents
+best_pipeline_search_runs/     Persisted runs; one directory is marked *_PROD
+kubernetes/                    Deployment, service, and local deployment helpers
+```
 
 ### Train and promote a model
 
@@ -82,12 +132,11 @@ uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 
 Example request:
 
-```powershell
-Invoke-RestMethod `
-  -Method Post `
-  -Uri "http://127.0.0.1:8000/classify_document" `
-  -ContentType "application/json" `
-  -Body '{"document_text":"The spacecraft entered lunar orbit after a six-day journey."}'
+```bash
+curl --request POST \
+  --url http://127.0.0.1:8000/classify_document \
+  --header 'Content-Type: application/json' \
+  --data '{"document_text":"The spacecraft entered lunar orbit after a six-day journey."}'
 ```
 
 ## Data, Modelling, And Evaluation
@@ -232,13 +281,21 @@ PORT_FORWARD=true ./kubernetes/local_deploy/linux_local.sh
 
 | Test type | Purpose | Command |
 | --- | --- | --- |
-| API | Request validation, error handling, batching, health checks, and OOD response behavior | `uv run python -m pytest tests/api -q` |
-| Unit | Small model, data-preparation, evaluation, tuning, and prediction behavior | `uv run python -m pytest tests/model/unit -q` |
-| Integration | End-to-end model workflow, persistence, and runtime loading | `uv run python -m pytest tests/model/integration/test_model_workflow.py -q` |
-| Acceptance | Expected predictions for known categories across configured text lengths | `uv run python -m pytest tests/model/acceptance/test_i1a_known_class_by_length_fixtures.py -q` and `uv run python -m pytest tests/model/acceptance/test_i1a_known_class_by_length_behavior.py -q` |
+| API | Request validation, error handling, batching, health checks, and OOD response behavior | `uv run --extra dev python -m pytest tests/api -q` |
+| Unit | Small model, data-preparation, evaluation, tuning, and prediction behavior | `uv run --extra dev python -m pytest tests/model/unit -q` |
+| Integration | End-to-end model workflow, persistence, and runtime loading | `uv run --extra dev python -m pytest tests/model/integration/test_model_workflow.py -q` |
+| Fixture integrity | Validates the generated dataset's structure, length buckets, and independence from source records | `uv run --extra dev python -m pytest tests/model/acceptance/test_i1a_known_class_by_length_fixtures.py -q` |
+| Golden behavior | Evaluates the promoted pipeline and OOD policy against the generated dataset | `uv run --extra dev python -m pytest tests/model/acceptance/test_i1a_known_class_by_length_behavior.py -q` |
 
-The acceptance fixture data, generation prompt, and refresh command are stored
-alongside the tests:
+The behavior test is intentionally a production-readiness gate, not a test that
+currently passes. Its configured thresholds are 90% overall and balanced
+accuracy, plus 80% accuracy for every class and length bucket. The current run
+scores 60% overall and balanced accuracy, so it fails the gate. This is the
+expected result until the model improves.
+
+The fixture data, generation prompt, and refresh command are stored alongside
+the acceptance tests. Regeneration uses a 50-cell class-by-length matrix and
+records the `gpt-5-mini` model and prompt-level seed in every row:
 
 ```powershell
 uv run python -m tests.model.acceptance.data.i1a_known_class_by_length.generate_id_by_length_fixtures --fresh --workers 4 --request-timeout 180
@@ -257,15 +314,12 @@ latency and compute cost, so it should be used as a fallback rather than for
 every request. The notebook includes a zero-shot experiment to evaluate this
 direction, but no transformer is used by the deployed API.
 
-## Project Map
-
-```text
-exploration_solution.ipynb     Analysis, evaluation, and transformer experiment
-config/                        Model and API configuration
-src/model/                     Reproducible training, tuning, evaluation, and prediction
-src/api/                       FastAPI application and request batching
-tests/                         API, unit, integration, and acceptance tests
-data/dataset/                  Labeled source documents
-best_pipeline_search_runs/     Persisted runs; one directory is marked *_PROD
-kubernetes/                    Deployment, service, and local deployment helpers
-```
+Another experiment is synthetic augmentation with new, disjoint generation
+seeds. Additional known-class documents could be reviewed and added to the
+training data. Additional OOD documents could improve threshold tuning and
+evaluation, and could train the future transformer fallback. They must not be
+used as an eleventh `other` training class for the current TF-IDF classifier,
+because its contract deliberately trains only on known classes. The committed
+50-item golden dataset must remain untouched and separate from any augmentation
+corpus. Synthetic data can broaden coverage, but it does not replace externally
+collected and labelled production data.
